@@ -1,6 +1,7 @@
 package main
 
 import (
+  "bytes"
 	"context"
 	"encoding/csv"
 	"flag"
@@ -33,6 +34,8 @@ var (
 	sortField          = flag.String("sort", "b", "sort field for testing proxies, b for bandwidth, t for TTFB")
 	output             = flag.String("output", "", "output result to csv/yaml file")
 	concurrent         = flag.Int("concurrent", 4, "download concurrent size")
+  outfile            = flag.String("outfile", "result", "outfile name")
+  band_thred         = flag.Float64("widthred", -0.1, "less than this value, don't output to outfile")
 )
 
 type CProxy struct {
@@ -139,11 +142,11 @@ func main() {
 	}
 
 	if strings.EqualFold(*output, "yaml") {
-		if err := writeNodeConfigurationToYAML("result.yaml", results, allProxies); err != nil {
+		if err := writeNodeConfigurationToYAML(*outfile+".yaml", results, allProxies, *band_thred); err != nil {
 			log.Fatalln("Failed to write yaml: %s", err)
 		}
 	} else if strings.EqualFold(*output, "csv") {
-		if err := writeToCSV("result.csv", results); err != nil {
+		if err := writeToCSV(*outfile+".csv", results); err != nil {
 			log.Fatalln("Failed to write csv: %s", err)
 		}
 	}
@@ -165,7 +168,29 @@ func loadProxies(buf []byte) (map[string]CProxy, error) {
 	rawCfg := &RawConfig{
 		Proxies: []map[string]any{},
 	}
-	if err := yaml.Unmarshal(buf, rawCfg); err != nil {
+
+  quot := []byte("&quot")
+  quot_full := []byte("&quot;")
+  q_mark := []byte("?")
+  replace_str := []byte("")
+  n := -1
+
+  tmp_buf := bytes.Replace(buf, quot_full, replace_str, n)
+  s_buf :=  bytes.Replace(tmp_buf, quot, replace_str, n)
+  tmp_buf = bytes.Replace(s_buf, q_mark, replace_str, n)
+//  for j := 0; j < len(buf); {
+//    if bytes.HasPrefix(buf[j:], quot) {
+//      bytes.Replace(buf[j:], old, "     ", n)
+//      //copy(result[i:], new)
+//      i += len(new)
+//      j += len(old)
+//    } else {
+//      i++
+//      j++
+//    }
+//  }
+	if err := yaml.Unmarshal(tmp_buf, rawCfg); err != nil {
+    log.Warnln("Self_:Unmarshal rawCfg , err.")
 		return nil, err
 	}
 	proxies := make(map[string]CProxy)
@@ -183,7 +208,10 @@ func loadProxies(buf []byte) (map[string]CProxy, error) {
 		}
 		proxies[proxy.Name()] = CProxy{Proxy: proxy, SecretConfig: config}
 	}
+  ii := 0
 	for name, config := range providersConfig {
+    ii++
+    log.Warnln("Self_Provider:%d name: %s.", ii, name)
 		if name == provider.ReservedName {
 			return nil, fmt.Errorf("can not defined a provider called `%s`", provider.ReservedName)
 		}
@@ -328,7 +356,7 @@ func formatMilliseconds(v time.Duration) string {
 	return fmt.Sprintf("%.02fms", float64(v.Milliseconds()))
 }
 
-func writeNodeConfigurationToYAML(filePath string, results []Result, proxies map[string]CProxy) error {
+func writeNodeConfigurationToYAML(filePath string, results []Result, proxies map[string]CProxy, band_thred float64) error {
 	fp, err := os.Create(filePath)
 	if err != nil {
 		return err
@@ -338,6 +366,9 @@ func writeNodeConfigurationToYAML(filePath string, results []Result, proxies map
 	var sortedProxies []any
 	for _, result := range results {
 		if v, ok := proxies[result.Name]; ok {
+      if result.Bandwidth <= band_thred {
+        continue
+      }
 			sortedProxies = append(sortedProxies, v.SecretConfig)
 		}
 	}
