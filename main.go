@@ -189,15 +189,31 @@ func loadProxies(buf []byte) (map[string]CProxy, error) {
 //      j++
 //    }
 //  }
+//  obfs_cipher := []byte("aes-128-gcm")
+//  if bytes.Contains(tmp_buf, obfs_cipher) {
+//		return nil, fmt.Errorf("proxy obfs not support cipher %s ", obfs_cipher)
+//  }
 	if err := yaml.Unmarshal(tmp_buf, rawCfg); err != nil {
     log.Warnln("Self_:Unmarshal rawCfg , err.")
 		return nil, err
 	}
+
 	proxies := make(map[string]CProxy)
 	proxiesConfig := rawCfg.Proxies
 	providersConfig := rawCfg.Providers
 
+  cipher_str := "aes-128-gcm" //"chacha20-ietf-poly1305"
 	for i, config := range proxiesConfig {
+    val, ok := config["cipher"]
+    if ok {
+      sval, yok := val.(string)
+      if yok {
+        if strings.Contains(sval, cipher_str) {
+          fmt.Println("obfs cipher", cipher_str)
+          continue
+        }
+      }
+    }
 		proxy, err := adapter.ParseProxy(config)
 		if err != nil {
 			return nil, fmt.Errorf("proxy %d: %w", i, err)
@@ -206,6 +222,8 @@ func loadProxies(buf []byte) (map[string]CProxy, error) {
 		if _, exist := proxies[proxy.Name()]; exist {
 			return nil, fmt.Errorf("proxy %s is the duplicate name", proxy.Name())
 		}
+    // proxy_json, err := proxy.MarshalJSON()
+    // print( proxy_json);
 		proxies[proxy.Name()] = CProxy{Proxy: proxy, SecretConfig: config}
 	}
   ii := 0
@@ -215,6 +233,18 @@ func loadProxies(buf []byte) (map[string]CProxy, error) {
 		if name == provider.ReservedName {
 			return nil, fmt.Errorf("can not defined a provider called `%s`", provider.ReservedName)
 		}
+
+    val, ok := config["cipher"]
+    if ok {
+      sval, yok := val.(string)
+      if yok {
+        if strings.Contains(sval, cipher_str) {
+          fmt.Println("obfs cipher", cipher_str)
+          continue
+        }
+      }
+    }
+
 		pd, err := provider.ParseProxyProvider(name, config)
 		if err != nil {
 			return nil, fmt.Errorf("parse proxy provider %s error: %w", name, err)
