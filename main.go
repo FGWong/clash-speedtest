@@ -171,13 +171,15 @@ func loadProxies(buf []byte) (map[string]CProxy, error) {
 
   quot := []byte("&quot")
   quot_full := []byte("&quot;")
+  star_mark := []byte("*")
   q_mark := []byte("?")
   replace_str := []byte("")
   n := -1
 
   tmp_buf := bytes.Replace(buf, quot_full, replace_str, n)
-  s_buf :=  bytes.Replace(tmp_buf, quot, replace_str, n)
-  tmp_buf = bytes.Replace(s_buf, q_mark, replace_str, n)
+  s_buf := bytes.Replace(tmp_buf, quot, replace_str, n)
+  st_buf :=  bytes.Replace(s_buf, star_mark, replace_str, n)
+  tmp_buf = bytes.Replace(st_buf, q_mark, replace_str, n)
 //  for j := 0; j < len(buf); {
 //    if bytes.HasPrefix(buf[j:], quot) {
 //      bytes.Replace(buf[j:], old, "     ", n)
@@ -203,23 +205,67 @@ func loadProxies(buf []byte) (map[string]CProxy, error) {
 	providersConfig := rawCfg.Providers
 
   cipher_str := "aes-128-gcm" //"chacha20-ietf-poly1305"
+  type_trojan := "trojan" // []byte("trojan")
+  type_vmess := "vmess" //[]byte("vmess")
+
 	for i, config := range proxiesConfig {
-    val, ok := config["cipher"]
-    if ok {
+    type_val, ok := config["type"]
+    if !ok {
+      log.Warnln("proxy %d node type is error.", i)
+      continue
+    }
+    //if !bytes.Equal(type_trojan, bytes.ToLower([]byte(type_val)))
+    stype, yok := type_val.(string)
+    if !yok {
+      log.Warnln("proxy type uuid is illeage, proxy: %d", i)
+      continue
+    }
+    if strings.EqualFold(type_trojan, stype) != true {
+      val, ok := config["cipher"]
+      if !ok {
+        log.Warnln("Not trojan proxy, and cipher error, proxy: %d", i)
+        continue
+      }
       sval, yok := val.(string)
       if yok {
         if strings.Contains(sval, cipher_str) {
           fmt.Println("obfs cipher", cipher_str)
           continue
         }
+      } else {
+        log.Warnln("%s to string error, proxy: %d", val, i)
+      }
+    }
+
+    //if bytes.Equal(type_vmess, bytes.ToLower([]byte(type_val)))
+    if strings.EqualFold(type_vmess, stype) {
+      uuid_val, ok := config["uuid"]
+      if ok {
+        suuid, yok := uuid_val.(string)
+        if !yok {
+          log.Warnln("trojan type uuid is illeage, proxy: %d", i)
+          continue
+        }
+        strCount := strings.Count(suuid, "")
+        if strCount != 37 {
+          log.Warnln("trojan type uuid len:%d isn't equal 37, proxy: %d, %s", strCount, i, suuid)
+          continue
+        }
+      } else {
+        log.Warnln("trojan type hasn't uuid, proxy: %d", i)
+        continue
       }
     }
 		proxy, err := adapter.ParseProxy(config)
 		if err != nil {
+      log.Warnln("proxy %d: %w", i, err)
+      continue
 			return nil, fmt.Errorf("proxy %d: %w", i, err)
 		}
 
 		if _, exist := proxies[proxy.Name()]; exist {
+      log.Warnln("proxy %s is the duplicate name", proxy.Name())
+      continue
 			return nil, fmt.Errorf("proxy %s is the duplicate name", proxy.Name())
 		}
     // proxy_json, err := proxy.MarshalJSON()
@@ -234,17 +280,54 @@ func loadProxies(buf []byte) (map[string]CProxy, error) {
 			return nil, fmt.Errorf("can not defined a provider called `%s`", provider.ReservedName)
 		}
 
-    val, ok := config["cipher"]
-    if ok {
+    type_val, ok := config["type"]
+    if !ok {
+      log.Warnln("proxy %d node type is error.", ii)
+      continue
+    }
+
+    stype, yok := type_val.(string)
+    if !yok {
+      log.Warnln("proxy type uuid is illeage, proxy: %d", ii)
+      continue
+    }
+    //if !bytes.Equal(type_trojan, bytes.ToLower([]byte(type_val))) {
+    if strings.EqualFold(type_trojan, stype) != true {
+      val, ok := config["cipher"]
+      if !ok {
+        log.Warnln("Not trojan proxy, and cipher error, proxy: %d", ii)
+        continue
+      }
       sval, yok := val.(string)
       if yok {
         if strings.Contains(sval, cipher_str) {
           fmt.Println("obfs cipher", cipher_str)
           continue
         }
+      } else {
+        log.Warnln("%s to string error, proxy: %d", val, ii)
       }
     }
 
+    //if bytes.Equal(type_vmess, bytes.ToLower([]byte(type_val))) {
+    if strings.EqualFold(type_vmess, stype) {
+      uuid_val, ok := config["uuid"]
+      if ok {
+        suuid, yok := uuid_val.(string)
+        if !yok {
+          log.Warnln("trojan type uuid is illeage, proxy: %d", ii)
+          continue
+        }
+        strCount := strings.Count(suuid, "")
+        if strCount != 37 {
+          log.Warnln("trojan type uuid len:%d isn't equal 37, proxy: %d, %s", strCount, ii, suuid)
+          continue
+        }
+      } else {
+        log.Warnln("trojan type hasn't uuid, proxy: %d", ii)
+        continue
+      }
+    }
 		pd, err := provider.ParseProxyProvider(name, config)
 		if err != nil {
 			return nil, fmt.Errorf("parse proxy provider %s error: %w", name, err)
